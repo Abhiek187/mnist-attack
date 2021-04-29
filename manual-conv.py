@@ -2,28 +2,84 @@ from download_mnist import load
 import numpy as np
 from time import time
 
-ALPHA = 0.01  # learning rate
+# Training settings
 BATCH_SIZE = 128  # mini-batch SGD batch size
 CLASSES = 10  # number of possible output values
 EPOCHS = 10  # iterations during training
-H1 = 200  # neurons in the 1st hidden layer
-H2 = 50  # neurons in the 2nd hidden layer
-LAMBDA = 0.001  # regularization constant
+FILTER1 = 32  # filters in the first CONV layer
+FILTER2 = 64  # filters in the second CONV layer
+FILTER_SIZE = 3  # filter size for the convolution layers
+H1 = 9216  # neurons in the first FC layer
+H2 = 128  # neurons in the second FC layer
+
+
+# A class to store all the weights and biases in each layer
+class Weights:
+    def __init__(self, rng):
+        self.conv1 = 0.01 * rng.standard_normal((FILTER1, 1, FILTER_SIZE, FILTER_SIZE))
+        self.conv1b = np.zeros(FILTER1)  # a bias value per filter
+        self.conv2 = 0.01 * rng.standard_normal((FILTER2, FILTER1, FILTER_SIZE, FILTER_SIZE))
+        self.conv2b = np.zeros(FILTER2)
+        self.fc1 = 0.01 * rng.standard_normal((H1, H2))
+        self.fc1b = np.zeros((1, H2))
+        self.fc2 = 0.01 * rng.standard_normal((H2, CLASSES))
+        self.fc2b = np.zeros((1, CLASSES))
+
+
+def conv(x, kernel, bias):
+    # Perform convolution using the provided filters
+    # Inputs: HxWxCxN, Filters: RxSxCxM, Output: ExFxMxN, P = padding, T = stride
+    # E = (H + 2P - R)/T + 1
+    # F = (W + 2P - S)/T + 1
+    # params = (RSC + 1)M
+    n, _, h, w = x.shape
+    m, _, r, s = kernel.shape
+    # Calculate the size of the output
+    e = h - r + 1
+    f = w - s + 1
+    y = np.zeros((n, m, e, f))
+
+    # Loop across n inputs
+    for b in range(n):
+        # Loop across m filters
+        for fi in range(m):
+            # Slide the filter across the input
+            for i in range(e):
+                for j in range(f):
+                    # Do element-wise multiplication and sum all the elements across all channels
+                    x_ij = x[b, :, i:(i + r), j:(j + s)]
+                    y[b, fi, i, j] = np.sum(x_ij * kernel[fi]) + bias[fi]
+
+    return y
+
+
+def max_pool(x, scale):
+    # Downscale the input
+    n, c, h, w = x.shape
+    # Calculate the size of the output
+    e = h // scale
+    f = w // scale
+    y = np.zeros((n, c, e, f))
+
+    # Slide the filter across the input with a stride of the scale
+    for i in range(e):
+        for j in range(f):
+            # Find the maximum value across scale^2 elements
+            x_ij = x[:, :, i * scale:(i * scale + scale), j * scale:(j * scale + scale)]
+            y[:, :, i, j] = np.amax(x_ij, axis=(2, 3))
+
+    return y
 
 
 def train(x, y):
     # Zero-center the input
     x -= np.mean(x, axis=0)  # take the mean of each of the k pixels
-    m, k = x.shape
+    m = x.shape[0]
 
     # Randomly initialize the weights and biases
-    rng = np.random.default_rng()
-    w1 = 0.01 * rng.standard_normal((k, H1))
-    b1 = np.zeros((1, H1))
-    w2 = 0.01 * rng.standard_normal((H1, H2))
-    b2 = np.zeros((1, H2))
-    w3 = 0.01 * rng.standard_normal((H2, CLASSES))
-    b3 = np.zeros((1, CLASSES))
+    rng = np.random.default_rng()  # PCG generator
+    weights = Weights(rng)
+    alpha = 0.1  # learning rate
 
     # Send the entire training data every epoch
     for e in range(1, EPOCHS + 1):
@@ -34,14 +90,25 @@ def train(x, y):
 
         for b in range(m // BATCH_SIZE):
             # Filter the appropriate batches from the training input and output
-            xb = x[BATCH_SIZE * b: BATCH_SIZE * (b + 1)]  # BATCH_SIZE x k
+            xb = x[BATCH_SIZE * b: BATCH_SIZE * (b + 1)]  # BATCH_SIZE x 1 x 28 x 28
             yb = y[BATCH_SIZE * b: BATCH_SIZE * (b + 1)]  # BATCH_SIZE
 
             # Forward propagation
             # ReLU: max(0, x)
-            relu1 = np.maximum(0, xb @ w1 + b1)  # BATCH_SIZE x 200
-            relu2 = np.maximum(0, relu1 @ w2 + b2)  # BATCH_SIZE x 50
-            scores = relu2 @ w3 + b3  # BATCH_SIZE x 10
+            # Convolution layers
+            relu1 = np.maximum(0, conv(xb, weights.conv1, weights.conv1b))  # 32 x 26 x 26
+            print("Conv1 done")
+            relu2 = np.maximum(0, conv(relu1, weights.conv2, weights.conv2b))  # 64 x 24 x 24
+            print("Conv2 done")
+            # Max pooling layer, followed by flattening
+            pool = max_pool(relu2, 2)  # 64 x 12 x 12
+            flat = pool.reshape(pool.shape[0], -1)  # BATCH_SIZE x 9216
+            print("Pooling done")
+            # Fully-connected layers
+            relu3 = np.maximum(0, flat @ weights.fc1 + weights.fc1b)  # BATCH_SIZE x 128
+            print("FC1 done")
+            scores = relu3 @ weights.fc2 + weights.fc2b  # BATCH_SIZE x 10
+            print("FC2 done")
 
             # Softmax: e^x / sum(e^xi)
             scores -= np.amax(scores, axis=1, keepdims=True)  # prevent overflow
@@ -52,14 +119,11 @@ def train(x, y):
             # Compute the cross-entropy loss
             # Get the probability amount for the correct output of each input
             correct_probs_log = -np.log(probs[range(BATCH_SIZE), yb])
-            loss_data = np.sum(correct_probs_log) / BATCH_SIZE
-            # L2 loss (ridge regression)
-            loss_reg = 0.5 * LAMBDA * (np.sum(w1 ** 2) + np.sum(w2 ** 2) + np.sum(w3 ** 2))
-            loss = loss_data + loss_reg
-
+            loss = np.sum(correct_probs_log) / BATCH_SIZE
             # Print every 10th batch
             if b % 10 == 0:
                 print(f"Epoch {e}/{EPOCHS}, Batch {b + 1}/{m // BATCH_SIZE}: Loss {loss}")
+                return weights  # TODO: remove once the backward propagation is working
 
             # Backward propagation
             dscores = probs  # BATCH_SIZE x 10
@@ -79,45 +143,67 @@ def train(x, y):
             db1 = np.sum(dh1, axis=0, keepdims=True)  # 200
 
             # Update the weights and biases
-            w1 -= ALPHA * dw1
-            b1 -= ALPHA * db1
-            w2 -= ALPHA * dw2
-            b2 -= ALPHA * db2
-            w3 -= ALPHA * dw3
-            b3 -= ALPHA * db3
+            weights.conv1 -= alpha * dw1
+            weights.conv1b -= alpha * db1
+            weights.conv2 -= alpha * dw2
+            weights.conv2b -= alpha * db2
+            weights.fc1 -= alpha * dw3
+            weights.fc1b -= alpha * db3
+            weights.fc2 -= alpha * dw4
+            weights.fc2b -= alpha * db4
+
+        # Decay the learning rate every epoch
+        alpha *= 0.7
 
         # Compute the training accuracy after each epoch
-        relu1 = np.maximum(0, x @ w1 + b1)  # m x 200
-        relu2 = np.maximum(0, relu1 @ w2 + b2)  # m x 50
-        scores = relu2 @ w3 + b3  # m x 10
-        y_pred = np.argmax(scores, axis=1)  # get the output with the highest score
-        accuracy = np.mean(y_pred == y)  # the ratio of correct outputs
-        print(f"Epoch {e}: Training accuracy {(100 * accuracy):.0f}%")
+        test(x, y, weights, is_training=True)
+        # relu3 = np.maximum(0, x @ weights.fc1 + weights.fc1b)  # m x 128
+        # scores = relu3 @ weights.fc2 + weights.fc2b  # m x 10
+        # y_pred = np.argmax(scores, axis=1)  # get the output with the highest score
+        # accuracy = np.mean(y_pred == y)  # the ratio of correct outputs
+        # print(f"Epoch {e}: Training accuracy {(100 * accuracy):.0f}%")
 
-    return w1, b1, w2, b2, w3, b3
+    return weights
 
 
-def test(x, y, w1, b1, w2, b2, w3, b3):
+def test(x, y, weights, is_training=False):
     # Calculate the accuracy of the testing data
     x -= np.mean(x, axis=0)  # need to zero-center the input, like with training
-    relu1 = np.maximum(0, x @ w1 + b1)  # m x 200
-    relu2 = np.maximum(0, relu1 @ w2 + b2)  # m x 50
-    scores = relu2 @ w3 + b3  # m x 10
+    # Convolution layers
+    relu1 = np.maximum(0, conv(x, weights.conv1, weights.conv1b))  # 32 x 26 x 26
+    print("Conv1 done")
+    relu2 = np.maximum(0, conv(relu1, weights.conv2, weights.conv2b))  # 64 x 24 x 24
+    print("Conv2 done")
+    # Max pooling layer, followed by flattening
+    pool = max_pool(relu2, 2)  # 64 x 12 x 12
+    flat = pool.reshape(pool.shape[0], -1)  # m x 9216
+    print("Pooling done")
+    # Fully-connected layers
+    relu3 = np.maximum(0, flat @ weights.fc1 + weights.fc1b)  # m x 128
+    print("FC1 done")
+    scores = relu3 @ weights.fc2 + weights.fc2b  # m x 10
+    print("FC2 done")
     y_pred = np.argmax(scores, axis=1)
     accuracy = np.mean(y_pred == y)
-    print(f"Testing accuracy {(100 * accuracy):.0f}%")
+
+    # Indicate whether this is the training or testing accuracy
+    if is_training:
+        print(f"Training accuracy {(100 * accuracy):.0f}%")
+    else:
+        print(f"Testing accuracy {(100 * accuracy):.0f}%")
 
 
 def main():
     # x_train: 60K x 784, y_train: 60K, x_test: 10K x 784, y_test: 10K
     x_train, y_train, x_test, y_test = load()
-    x_train = x_train.astype(float)
-    x_test = x_test.astype(float)
+    # Un-flatten the images and add a dimension for the number of channels
+    x_train = x_train.reshape(-1, 1, 28, 28).astype(float)
+    x_test = x_test.reshape(-1, 1, 28, 28).astype(float)
 
     start = time()
-    w1, b1, w2, b2, w3, b3 = train(x_train, y_train)
+    weights = train(x_train, y_train)
     print(f"Training took {time() - start} s")
-    test(x_test, y_test, w1, b1, w2, b2, w3, b3)
+    test(x_test, y_test, weights)
 
 
 if __name__ == "__main__":
