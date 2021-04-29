@@ -4,7 +4,9 @@ from urllib import request
 from urllib.error import HTTPError
 import gzip
 import pickle
+import socket
 
+socket.setdefaulttimeout(3)  # timeout in 3 seconds if the connection hangs
 folder = "downloads/mnist-pkl/"
 filename = [
     ["training_images", "train-images-idx3-ubyte.gz"],
