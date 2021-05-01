@@ -211,7 +211,7 @@ if __name__ == "__main__":
                         help="If specified, restore this pretrained model before any training.")
     parser.add_argument("--save_model", action="store_true", default=True,
                         help="For Saving the current Model")
-    parser.add_argument("--save_checkpoint", type=str, default="downloads/mnist_cnn.pth",
+    parser.add_argument("--save_checkpoint", type=str, default="mnist_cnn.pth",
                         help="Save the trained model.")
     parser.add_argument("--loss_fig", type=str, default="downloads/loss_curve.png",
                         help="Where to save the plotted training loss curve.")
