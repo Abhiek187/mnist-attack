@@ -56,10 +56,7 @@ def fgsm_attack(image, epsilon, data_grad):
     # Collect the element-wise sign of the data gradient
     sign_data_grad = data_grad.sign()
     # Create the perturbed image by adjusting each pixel of the input image
-    perturbed_image = image + epsilon * sign_data_grad
-    # Clamp the output to the range [0, 1]
-    perturbed_image = torch.clamp(perturbed_image, 0, 1)
-    return perturbed_image
+    return image + epsilon * sign_data_grad
 
 
 def test(model, device, test_loader, epsilon):
@@ -68,6 +65,7 @@ def test(model, device, test_loader, epsilon):
     # Accuracy counter
     correct = 0
     adv_examples = []
+    img_count = 0
 
     # Feed one batch at a time
     for test_idx, (data, target) in enumerate(test_loader):
@@ -108,9 +106,10 @@ def test(model, device, test_loader, epsilon):
             correct += 1
 
         # Save the first 5 images for each epsilon
-        if test_idx < 5:
+        if img_count < 5:
             adv_examples.append((init_pred.item(), final_pred.item(),
                                  perturbed_data[0][0].cpu().detach()))
+            img_count += 1
 
     accuracy = correct / len(test_loader.dataset)
     return accuracy, adv_examples
@@ -136,7 +135,7 @@ def main():
         ckpt = torch.load(FLAGS.start_checkpoint, map_location=device)
         model.load_state_dict(ckpt)
 
-    epsilons = [0, 0.2, 0.4, 0.6, 0.8, 1]
+    epsilons = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
     accuracies = []
     examples = []
 
@@ -149,7 +148,6 @@ def main():
     fig = plt.figure(figsize=(5, 5))
     plt.plot(epsilons, accuracies, "*-")
     plt.yticks(np.arange(0, 1.1, step=0.1))
-    plt.xticks(np.arange(0, 1.2, step=0.2))
     plt.title("Accuracy vs Epsilon")
     plt.xlabel("Epsilon")
     plt.ylabel("Accuracy")
