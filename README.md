@@ -4,3 +4,5 @@ This program showcases the security vulnerabilities of neural networks. It start
 ## Instructions
 1. Run `python3 gen_lenet.py` to save the LeNet model.
 2. Run `python3 test_lenet.py` to launch the adversarial attack.
+
+The results will appear in the `downloads` folder (ignored by Git).
