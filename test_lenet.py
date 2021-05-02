@@ -108,7 +108,7 @@ def test(model, device, test_loader, epsilon):
         # Save the first 5 images for each epsilon
         if img_count < 5:
             adv_examples.append((init_pred.item(), final_pred.item(),
-                                 perturbed_data[0][0].cpu().detach()))
+                                 perturbed_data.squeeze().cpu().detach()))
             img_count += 1
 
     accuracy = correct / len(test_loader.dataset)
@@ -184,7 +184,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_dir", type=str, default="downloads",
                         help="Where to download the MNIST data to")
-    parser.add_argument("--start_checkpoint", type=str, default="mnist_cnn.pth",
+    parser.add_argument("--start_checkpoint", type=str, default="downloads/mnist_cnn.pth",
                         help="If specified, restore this pretrained model before any training.")
     parser.add_argument("--acc_fig", type=str, default="downloads/accuracy.png",
                         help="Where to save the plotted accuracy curve.")

@@ -181,7 +181,7 @@ def main():
     plt.xlabel("Epoch")
     plt.ylabel("Training Loss")
     # Align the x values to the correct epoch number
-    epoch_values = np.arange(1, len(loss_values) + 1, dtype=np.float)
+    epoch_values = np.arange(1, len(loss_values) + 1, dtype="float")
     epoch_values *= FLAGS.train_batch_size * FLAGS.log_interval
     epoch_values /= len(train_loader.dataset)
     plt.xticks(np.arange(1, 11))
@@ -211,7 +211,7 @@ if __name__ == "__main__":
                         help="If specified, restore this pretrained model before any training.")
     parser.add_argument("--save_model", action="store_true", default=True,
                         help="For Saving the current Model")
-    parser.add_argument("--save_checkpoint", type=str, default="mnist_cnn.pth",
+    parser.add_argument("--save_checkpoint", type=str, default="downloads/mnist_cnn.pth",
                         help="Save the trained model.")
     parser.add_argument("--loss_fig", type=str, default="downloads/loss_curve.png",
                         help="Where to save the plotted training loss curve.")
